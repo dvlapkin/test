@@ -2,12 +2,8 @@ package main
 import (
 	"errors"
 	"fmt"
-	//"html"
-	//"html/template"
 	"log"
-	//"io/ioutil"
 	"net/http"
-	//"net"
 	"time"
 	"reflect"
 	"strings"
@@ -21,7 +17,8 @@ type MyForm struct{
 		Gender	 	string `required:"true" field:"gerder" name:"Пол" type:"select" select:"Не	известный=3,Мужской=1;selected,Женский=2"`
 		Resident bool `field:"resident" type:"radio" radio:"1;checked" name:"Резидент РФ"`
 		NoResident bool `field:"resident" type:"radio" radio:"2" name:"Не резидент РФ"`
-		MbResident bool `field:"resident" type:"radio" radio:"3;checked" name:"mb Резидент РФ"`
+		Foot bool `field:"body" type:"radio" radio:"1;checked" name:"Нога"`
+		Hand bool `field:"body" type:"radio" radio:"2" name:"Рука"`
 		Comment 	string `required:"true" field:"tarea" name:"комментарий" type:"textarea"`
 
 }
@@ -35,6 +32,7 @@ var (myform *MyForm
 
 func main() {
 	myform = &MyForm{UserName:"user",Age:21}
+	fmt.Println(myform)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			
 			if r.Method == "GET" {		
@@ -50,7 +48,7 @@ func main() {
 				if err != nil {
 					log.Fatal(err)
 					}						
-				fmt.Fprint(w,"post")
+				fmt.Fprint(w,myform)
 				}
 			})
 				
@@ -97,20 +95,19 @@ func FormCreate(formData *MyForm) (form string, err error){
 					}else{
 						// default value from variable
 						if def == "true"{
-									tt := val.Type().Field(i).Type.String()
-									fmt.Println("======================",tt)
-									if tt == "int" || tt == "int64" {
-										value_field := val.Field(i).Int()
-										def_value="value="+strconv.FormatInt(value_field,10)
-									}else if tt == "string" {
-										value_field := val.Field(i).String()
-										def_value="value='"+value_field+"'"
-									}else{
-										def_value=""
-									}
+							tt := val.Type().Field(i).Type.String()
+							if tt == "int" || tt == "int64" {
+								value_field := val.Field(i).Int()
+								def_value="value="+strconv.FormatInt(value_field,10)
+							}else if tt == "string" {
+								value_field := val.Field(i).String()
+								def_value="value='"+value_field+"'"
+							}else{
+								def_value=""
+							}
+							fmt.Println("default for ",name," : ",def_value)
 						}
-							//def_value="value='"+value_field+"'"}
-						fmt.Println(def_value)
+													
 						str = str+"<input type='"+field_type+"' name='"+field+"' "+def_value+"><br>"						
 					}
 			}else{
@@ -129,22 +126,50 @@ func FormRead(formData *MyForm, r *http.Request) (err error){
 	r.ParseForm()
 	for i := 0; i < val.NumField(); i++ {
 		f := val.Field(i)
-		//value_field := f.String()
-		tag := val.Type().Field(i).Tag		
+		tag := val.Type().Field(i).Tag	
+	
 		field := tag.Get("field")
-		form_v := r.PostFormValue(field)
-		fmt.Println("type : ",reflect.TypeOf(form_v))
-		v := reflect.ValueOf(form_v)
+		form_v := r.PostFormValue(field)		
+		t := val.Type().Field(i).Type.Name()
+		var v reflect.Value
+		if (tag.Get("type") == "radio"){
+			fmt.Println("radio: ",form_v)
+			if (form_v == strings.Split(tag.Get("radio"),";")[0]){	
+				v = reflect.ValueOf(true)
+			}else{
+				v = reflect.ValueOf(false)
+			}
+		}else{
+		switch t {
+			case "string":{
+				v = reflect.ValueOf(form_v)}
+			case "int":{
+				form_vi,_:=strconv.Atoi(form_v)
+				v = reflect.ValueOf(form_vi)}
+			case "int64":{
+				form_vi,_:=strconv.ParseInt(form_v,10,64)
+				v = reflect.ValueOf(form_vi)}
+			case "float64":{
+				form_vf,_:=strconv.ParseFloat(form_v,64)
+				v = reflect.ValueOf(form_vf)}
+			case "uint":{
+				form_vf,_:=strconv.ParseUint(form_v,10,0)
+				v = reflect.ValueOf(form_vf)}
+			case "uint64":{
+				form_vf,_:=strconv.ParseUint(form_v,10,64)
+				v = reflect.ValueOf(form_vf)}
+			case "bool":{
+				 
+				form_vb,_:=strconv.ParseBool(form_v)
+				fmt.Println("boolean:" , form_vb,val.Type().Field(i).Name)
+				v = reflect.ValueOf(form_vb)}
+			default:
+				fmt.Println("type not supported!") 
+			
+			}
+		}
 		f.Set(v)
-		
-		name := val.Type().Field(i).Name
-		value_field := f.String()
-		
-		fmt.Println("=====")
-		fmt.Println(name," : ",value_field)
-		//fmt.Println("settability of f:", f.CanSet())
-		fmt.Println("=====")
-		
+		fmt.Println("myform: ",myform)		
 	}
 return
 }
