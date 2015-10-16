@@ -13,7 +13,7 @@ import (
 )
 type MyForm struct{
 	UserName 	string `required:"true" field:"name" name:"Имя пользователя" type:"text" default:"true"`
-	Login 		int `field:"login" name:"Логин" type:"text"`
+	Login 		int `required:"true" field:"login" name:"Логин"`
 	Age 		int64 `field:"age" name:"Возраст" type:"text" default:"true"`
 	Koe 		float64 `field:"koef" name:"Коэфицент" type:"text" default:"true"`
 	UserPassword 	string `required:"true" field:"password" name:"Пароль пользователя" type:"password"`
@@ -23,7 +23,7 @@ type MyForm struct{
 	Foot 		bool `field:"body" type:"radio" radio:"1;checked" name:"Нога"`
 	Hand 		bool `field:"body" type:"radio" radio:"2" name:"Рука"`
 	Duration 	time.Duration `required:"true" field:"duration" name:"Длительность" type:"text" default:"true"`
-	Comment 	string `required:"true" field:"tarea" name:"комментарий" type:"textarea"`
+	Comment 	string `field:"tarea" name:"комментарий" type:"textarea"`
 }
 	
 
@@ -49,12 +49,12 @@ func main() {
 			if r.Method == "POST" {
 				err = FormRead(myform,r)
 				if err != nil {
-					log.Fatal(err)
-					}						
-				StructPrt(myform,os.Stdout)
-				StructPrt(myform,w)
+					fmt.Println("*** error : ",err)
+				}else{						
+					StructPrt(myform,os.Stdout)
+					StructPrt(myform,w)}
 				}
-			})
+			}) 
 				
 	err := http.ListenAndServe("localhost:1234", nil)
 	if err != nil {
@@ -70,34 +70,33 @@ func FormCreate(formData *MyForm) (form string, err error){
 //parse struct definition	
 	val := reflect.ValueOf(formData).Elem()
 	for i := 0; i < val.NumField(); i++ {			
-			tag := val.Type().Field(i).Tag
-			str=str+TagToHtml(tag)			
-
+			tag := val.Type().Field(i).Tag		
 			field_type := tag.Get("type")
 			field := tag.Get("field")
 			name := tag.Get("name")
 			def := tag.Get("default")
 			def_value:=""
+			if field_type == "" {field_type="text"}
 			
-			if (field_type != "")&&(field != "") {				
+			if (field != "")||(field != "-") {				
 					// label
 					if name != "" {
 						str = str+"<label>"+name+": </label><br>"}
 					
 					// type select					
 					if field_type == "select" {
-						SelectTagCreate(&str,field,tag.Get("select"))
+						SelectTagCreate(&str,tag)
 				
 					// type radio
 					}else if field_type == "radio"{
-						RadioTagCreate(&str,field,tag.Get("radio"))
+						RadioTagCreate(&str,tag)
 						
 					// textarea	
 					}else if field_type == "textarea"{
 						str = str+"<textarea name="+field+"></textarea><br>"
 						
 					}else{
-						// default value from variable
+						// inputs with default value from variable
 						if def == "true"{
 							tt := val.Type().Field(i).Type.String()
 							if tt == "int" || tt == "int64" {
@@ -117,7 +116,7 @@ func FormCreate(formData *MyForm) (form string, err error){
 								def_value="value="+strconv.FormatBool(value_field)
 							}else if tt == "time.Duration" {
 								value_field := val.Field(i).Int()
-								def_value="value="+strconv.FormatInt(value_field,10)
+								def_value="value="+strconv.FormatInt(value_field,10)+"ns"
 							}else{
 								def_value=""
 							}
@@ -127,7 +126,7 @@ func FormCreate(formData *MyForm) (form string, err error){
 						str = str+"<input type='"+field_type+"' name='"+field+"' "+def_value+"><br>"						
 					}
 			}else{
-				err = errors.New("*** error : no type or field in struct metadata")}			
+				err = errors.New("*** error : no field in struct metadata")}			
 	}
 	str=str+"<button type='submit'>send</button> </form>"
 	form=str
@@ -149,6 +148,11 @@ func FormRead(formData *MyForm, r *http.Request) (err error){
 		form_v := r.PostFormValue(field)		
 		struct_field_type := val.Type().Field(i).Type.Name()
 		var v reflect.Value
+		if tag.Get("required")== "true"&& form_v == "" {
+			err=errors.New("*** error :  form field "+field+" requared")
+			return
+		}
+		
 		if (tag.Get("type") == "radio"){
 			if (form_v == strings.Split(tag.Get("radio"),";")[0]){	
 				v = reflect.ValueOf(true)
@@ -160,42 +164,47 @@ func FormRead(formData *MyForm, r *http.Request) (err error){
 			case "string":{
 				v = reflect.ValueOf(form_v)}
 			case "int":{
-				form_vi,_:=strconv.Atoi(form_v)
-				v = reflect.ValueOf(form_vi)}
+				form_vi,e:=strconv.Atoi(form_v)
+				v = reflect.ValueOf(form_vi)
+				if e != nil {err = e;return}}
 			case "int64":{
-				form_vi,_:=strconv.ParseInt(form_v,10,64)
-				v = reflect.ValueOf(form_vi)}
+				form_vi,e:=strconv.ParseInt(form_v,10,64)
+				v = reflect.ValueOf(form_vi)
+				if e != nil {err = e;return}}
 			case "float64":{
-				form_vf,_:=strconv.ParseFloat(form_v,64)
-				v = reflect.ValueOf(form_vf)}
+				form_vf,e:=strconv.ParseFloat(form_v,64)
+				v = reflect.ValueOf(form_vf)
+				if e != nil {err = e;return}}
 			case "uint":{
-				form_vui,_:=strconv.ParseUint(form_v,10,0)
-				v = reflect.ValueOf(form_vui)}
+				form_vui,e:=strconv.ParseUint(form_v,10,0)
+				v = reflect.ValueOf(form_vui)
+				if e != nil {err = e;return}}
 			case "uint64":{
-				form_vui,_:=strconv.ParseUint(form_v,10,64)
-				v = reflect.ValueOf(form_vui)}
+				form_vui,e:=strconv.ParseUint(form_v,10,64)
+				v = reflect.ValueOf(form_vui)
+				if e != nil {err = e;return}}
 			case "Duration":{
-				form_vt,_:=time.ParseDuration(form_v)
-				v = reflect.ValueOf(form_vt)}			
+				form_vt,e:=time.ParseDuration(form_v)		
+				v = reflect.ValueOf(form_vt)
+				if e != nil {err = e;return}}			
 			case "bool":{				 
-				form_vb,_:=strconv.ParseBool(form_v)
-				v = reflect.ValueOf(form_vb)}
+				form_vb,e:=strconv.ParseBool(form_v)
+				v = reflect.ValueOf(form_vb)
+				if e != nil {err = e;return}}
 			default:
-				fmt.Println("type of",field,"(",struct_field_type,") not supported!") 
+					err=errors.New("*** error : type of"+field+"("+struct_field_type+") not supported!")
 			
 			}
 		}
-		f.Set(v)
-		fmt.Println("myform,",i," step:",myform)		
+		f.Set(v)	
 	}
 return
 }
 
-func TagToHtml(tag reflect.StructTag)(htmlstr string){
-return
-}
 
-func SelectTagCreate(s *string,f,tag string){
+func SelectTagCreate(s *string,t reflect.StructTag){
+	f:= t.Get("field")
+	tag:=t.Get("select")
 	*s +="<select name="+f+">"
 	options := strings.Split(tag,",")
 	var temps1 string
@@ -210,7 +219,9 @@ func SelectTagCreate(s *string,f,tag string){
 return
 }
 
-func RadioTagCreate(s *string,f,tag string){//(s string){
+func RadioTagCreate(s *string,t reflect.StructTag){
+	f:= t.Get("field")
+	tag:=t.Get("radio")
 	*s += "<input type='radio' name='"+f+"' "
 	radio_value := strings.Split(tag,";")
 	*s += "value='"+radio_value[0]+"' "
