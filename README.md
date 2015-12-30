@@ -1,3 +1,3 @@
 # test
 
-test app for vacancy
+create web-form from struct
